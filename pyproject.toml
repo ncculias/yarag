@@ -22,6 +22,7 @@ dependencies = []
 dev = [
   "pre-commit>=4.6",
   "pyright>=1.1.410",
+  "pytest>=9.1.1",
   "ruff>=0.15.18",
 ]
 
