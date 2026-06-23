@@ -8,3 +8,15 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment variables
+.env
+
+# Ruff-generated files
+.ruff_cache/
+
+# rumdl-generated files
+.rumdl_cache/
+
+# macOS
+.DS_Store
