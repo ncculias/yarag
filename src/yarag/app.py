@@ -55,15 +55,15 @@ def generate_upload_url(request: UploadRequest) -> UploadResponse:
             detail="Unsupported content type",
         )
 
-    now = datetime.now(UTC)
-    date_path = now.strftime("%Y/%m/%d")
+    date = datetime.now(UTC)
+    date_formatted = date.strftime("%Y/%m/%d")
     unique_id = uuid.uuid4().hex
-    file_key = f"{date_path}/{unique_id}{ext}"
+    key = f"{date_formatted}/{unique_id}{ext}"
 
     try:
         params = {
             "Bucket": settings.default_bucket,
-            "Key": file_key,
+            "Key": key,
             "ContentType": request.content_type,
         }
 
@@ -76,12 +76,12 @@ def generate_upload_url(request: UploadRequest) -> UploadResponse:
         logger.info(
             "Upload URL generated successfully",
             extra={
-                "file_key": file_key,
+                "key": key,
             },
         )
 
         return UploadResponse(
-            file_key=file_key,
+            key=key,
             upload_url=upload_url,
             expires_in=settings.default_expires_in,
             required_headers={"Content-Type": request.content_type},
@@ -91,7 +91,7 @@ def generate_upload_url(request: UploadRequest) -> UploadResponse:
         logger.exception(
             "Failed to generate upload URL",
             extra={
-                "file_key": file_key,
+                "key": key,
                 "bucket": settings.default_bucket,
             },
         )

@@ -6,14 +6,14 @@ class UploadRequest(BaseModel):
 
 
 class UploadResponse(BaseModel):
-    file_key: str
+    key: str
     upload_url: str
     expires_in: int
     required_headers: dict[str, str]
 
 
 class DownloadRequest(BaseModel):
-    file_key: str
+    key: str
     expires_in: int | None = None
 
 
