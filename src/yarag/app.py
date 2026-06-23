@@ -12,6 +12,8 @@ from fastapi import FastAPI, HTTPException, status
 from yarag.config import settings
 from yarag.schemas import UploadRequest, UploadResponse
 
+ALLOWED_CONTENT_TYPES = {"text/plain", "application/pdf"}
+
 app = FastAPI()
 
 
@@ -30,7 +32,7 @@ s3_client = boto3.client(
 
 
 # TODO: Limit maximum file upload size
-@app.post(path="/api/v1/uploads", status_code=status.HTTP_200_OK)
+@app.post(path="/api/v1/uploads", status_code=status.HTTP_201_CREATED)
 def generate_upload_url(request: UploadRequest) -> UploadResponse:
 
     logger.info(
@@ -39,6 +41,18 @@ def generate_upload_url(request: UploadRequest) -> UploadResponse:
             "content_type": request.content_type,
         },
     )
+
+    if request.content_type not in ALLOWED_CONTENT_TYPES:
+        logger.error(
+            "Unsupported content type",
+            extra={
+                "content_type": request.content_type,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported content type",
+        )
 
     ext = mimetypes.guess_extension(request.content_type)
 
@@ -55,16 +69,18 @@ def generate_upload_url(request: UploadRequest) -> UploadResponse:
             detail="Unsupported content type",
         )
 
-    date = datetime.now(UTC)
-    date_formatted = date.strftime("%Y/%m/%d")
+    now = datetime.now(UTC)
     unique_id = uuid.uuid4().hex
-    key = f"{date_formatted}/{unique_id}{ext}"
+    key = f"{now.strftime('%Y/%m/%d')}/{unique_id}{ext}"
 
     try:
         params = {
             "Bucket": settings.default_bucket,
             "Key": key,
             "ContentType": request.content_type,
+            "Metadata": {
+                "uploaded-at": now.isoformat(),
+            },
         }
 
         upload_url = s3_client.generate_presigned_url(
