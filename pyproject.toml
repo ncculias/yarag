@@ -1,14 +1,58 @@
+[build-system]
+build-backend = "uv_build"
+requires = [ "uv-build>=0.11.19,<0.12" ]
+
 [project]
 name = "yarag"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [
-    { name = "ax13s", email = "296017305+ax13s@users.noreply.github.com" },
+  { name = "ax13s", email = "296017305+ax13s@users.noreply.github.com" },
 ]
 requires-python = ">=3.13"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
 dependencies = []
 
-[build-system]
-requires = ["uv_build>=0.11.19,<0.12.0"]
-build-backend = "uv_build"
+[dependency-groups]
+dev = [
+  "pre-commit>=4.6",
+  "pyright>=1.1.410",
+  "ruff>=0.15.18",
+]
+
+[tool.ruff]
+line-length = 120
+lint.select = [
+  "B",  # flake8-bugbear
+  "C4", # flake8-comprehensions
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "I",  # isort
+  "UP", # pyupgrade
+  "W",  # pycodestyle warnings
+]
+
+[tool.pyright]
+venv = ".venv"
+venvPath = "."
+typeCheckingMode = "standard"
+include = [ "src/*" ]
+
+[tool.rumdl]
+disable = [ "MD013" ]
+include = [ "docs/*.md", "README.md" ]
+exclude = [ ".git", "node_modules", "LICENSE" ]
+respect-gitignore = true
+MD044.names = [
+  "rumdl",
+  "Markdown",
+  "GitHub",
+  "JavaScript",
+  "Node.js",
+  "TypeScript",
+]
