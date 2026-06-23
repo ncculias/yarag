@@ -8,7 +8,7 @@ class DownloadRequest(BaseModel):
 
 class DownloadResponse(BaseModel):
     download_url: str
-    expires_at_seconds: int
+    expires_in: int
 
 
 class UploadRequest(BaseModel):
@@ -21,5 +21,5 @@ class UploadRequest(BaseModel):
 class UploadResponse(BaseModel):
     file_key: str
     upload_url: str
-    expires_at_seconds: int
+    expires_in: int
     required_headers: dict[str, str]

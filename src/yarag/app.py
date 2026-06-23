@@ -65,7 +65,7 @@ def generate_upload_url(request: UploadRequest) -> UploadResponse:
         return UploadResponse(
             file_key=file_key,
             upload_url=upload_url,
-            expires_at_seconds=settings.default_expires_in,
+            expires_in=settings.default_expires_in,
             required_headers={"Content-Type": request.content_type},
         )
 
@@ -84,4 +84,4 @@ def generate_upload_url(request: UploadRequest) -> UploadResponse:
 
 
 if __name__ == "__main__":
-    uvicorn.run(app="yarag.app:app", reload=True)
+    uvicorn.run("yarag.app:app", reload=True)
