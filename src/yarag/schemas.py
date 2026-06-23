@@ -1,6 +1,17 @@
 from pydantic import BaseModel
 
 
+class UploadRequest(BaseModel):
+    content_type: str
+
+
+class UploadResponse(BaseModel):
+    file_key: str
+    upload_url: str
+    expires_in: int
+    required_headers: dict[str, str]
+
+
 class DownloadRequest(BaseModel):
     file_key: str
     expires_in: int | None = None
@@ -9,17 +20,3 @@ class DownloadRequest(BaseModel):
 class DownloadResponse(BaseModel):
     download_url: str
     expires_in: int
-
-
-class UploadRequest(BaseModel):
-    file_name: str
-    content_type: str
-    folder: str
-    expires_in: int | None = None
-
-
-class UploadResponse(BaseModel):
-    file_key: str
-    upload_url: str
-    expires_in: int
-    required_headers: dict[str, str]

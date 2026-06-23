@@ -1,5 +1,7 @@
 import logging
+import mimetypes
 import uuid
+from datetime import UTC, datetime
 
 import boto3
 import uvicorn
@@ -30,17 +32,33 @@ s3_client = boto3.client(
 # TODO: Limit maximum file upload size
 @app.post(path="/api/v1/uploads", status_code=status.HTTP_200_OK)
 def generate_upload_url(request: UploadRequest) -> UploadResponse:
-    unique_id = uuid.uuid4().hex
-    file_key = f"{request.folder}/{unique_id}-{request.file_name}"
 
     logger.info(
         "Generating upload URL",
         extra={
-            "folder": request.folder,
             "content_type": request.content_type,
-            "file_key": file_key,
         },
     )
+
+    ext = mimetypes.guess_extension(request.content_type)
+
+    if not ext:
+        logger.error(
+            "Unable to guess MIME type.",
+            extra={
+                "content_type": request.content_type,
+            },
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported content type",
+        )
+
+    now = datetime.now(UTC)
+    date_path = now.strftime("%Y/%m/%d")
+    unique_id = uuid.uuid4().hex
+    file_key = f"{date_path}/{unique_id}{ext}"
 
     try:
         params = {
