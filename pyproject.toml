@@ -1,0 +1,14 @@
+[project]
+name = "yarag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "ax13s", email = "296017305+ax13s@users.noreply.github.com" },
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
