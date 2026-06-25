@@ -20,7 +20,7 @@ app = FastAPI()
 # TODO: Use a independent logger and config
 logger = logging.getLogger("uvicorn")
 
-
+# TODO: Move this to lifespan.py
 s3_client = boto3.client(
     "s3",
     endpoint_url=settings.endpoint_url,
@@ -74,14 +74,7 @@ def generate_upload_url(request: UploadRequest) -> UploadResponse:
     key = f"{now.strftime('%Y/%m/%d')}/{unique_id}{ext}"
 
     try:
-        params = {
-            "Bucket": settings.default_bucket,
-            "Key": key,
-            "ContentType": request.content_type,
-            "Metadata": {
-                "uploaded-at": now.isoformat(),
-            },
-        }
+        params = {"Bucket": settings.default_bucket, "Key": key, "ContentType": request.content_type}
 
         upload_url = s3_client.generate_presigned_url(
             ClientMethod="put_object",
