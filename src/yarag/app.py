@@ -110,5 +110,9 @@ def generate_upload_url(request: UploadRequest) -> UploadResponse:
         ) from e
 
 
-if __name__ == "__main__":
+def main() -> None:
     uvicorn.run("yarag.app:app", reload=True)
+
+
+if __name__ == "__main__":
+    main()
