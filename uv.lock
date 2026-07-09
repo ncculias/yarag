@@ -803,6 +803,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "anyio" },
     { name = "pre-commit" },
     { name = "pyright" },
     { name = "pytest" },
@@ -823,6 +824,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "anyio", specifier = ">=4.14.0" },
     { name = "pre-commit", specifier = ">=4.6" },
     { name = "pyright", specifier = ">=1.1.410" },
     { name = "pytest", specifier = ">=9.1.1" },

@@ -30,7 +30,13 @@ scripts.create-user = "yarag.create_user:main"
 scripts.dev = "yarag.app:main"
 
 [dependency-groups]
-dev = [ "pre-commit>=4.6", "pyright>=1.1.410", "pytest>=9.1.1", "ruff>=0.15.18" ]
+dev = [
+ "anyio>=4.14.0",
+ "pre-commit>=4.6",
+ "pyright>=1.1.410",
+ "pytest>=9.1.1",
+ "ruff>=0.15.18",
+]
 
 [tool.ruff]
 line-length = 120

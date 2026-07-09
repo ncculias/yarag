@@ -10,6 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import FastAPI, HTTPException, status
 
 from yarag.auth import router as auth_router
+from yarag.chat import router as chat_router
 from yarag.config import settings
 from yarag.schemas import UploadRequest, UploadResponse
 from yarag.threads import router as threads_router
@@ -20,6 +21,7 @@ app = FastAPI()
 
 app.include_router(auth_router)
 app.include_router(threads_router)
+app.include_router(chat_router)
 
 
 # TODO: Use a independent logger and config
