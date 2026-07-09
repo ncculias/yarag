@@ -26,6 +26,7 @@ dependencies = [
   "sqlalchemy>=2.0",
   "uvicorn>=0.49",
 ]
+scripts.create-user = "yarag.create_user:main"
 scripts.dev = "yarag.app:main"
 
 [dependency-groups]
@@ -41,6 +42,9 @@ lint.select = [
   "I",  # isort
   "UP", # pyupgrade
   "W",  # pycodestyle warnings
+]
+lint.ignore = [
+  "B008", # FastAPI's Depends()/Security() are meant to be used as argument defaults
 ]
 
 [tool.pyright]
