@@ -12,12 +12,14 @@ from fastapi import FastAPI, HTTPException, status
 from yarag.auth import router as auth_router
 from yarag.config import settings
 from yarag.schemas import UploadRequest, UploadResponse
+from yarag.threads import router as threads_router
 
 ALLOWED_CONTENT_TYPES = {"text/plain", "application/pdf"}
 
 app = FastAPI()
 
 app.include_router(auth_router)
+app.include_router(threads_router)
 
 
 # TODO: Use a independent logger and config
