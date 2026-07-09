@@ -17,15 +17,6 @@ def _headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {settings.cf_api_token}"}
 
 
-def _snippet(chunk: dict) -> str:
-    content = chunk.get("content")
-    if isinstance(content, list) and content:
-        first = content[0]
-        text = first.get("text", "") if isinstance(first, dict) else str(first)
-        return text[:200]
-    return str(content or "")[:200]
-
-
 async def search(query: str) -> list[dict]:
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
@@ -35,11 +26,11 @@ async def search(query: str) -> list[dict]:
         )
         resp.raise_for_status()
         body = resp.json()
-    chunks = (body.get("result") or {}).get("data") or []
+    chunks = (body.get("result") or {}).get("chunks") or []
     return [
         {
-            "doc_name": c.get("filename") or "未知文件",
-            "snippet": _snippet(c),
+            "doc_name": c.get("item", {}).get("key") or "未知文件",
+            "snippet": (c.get("text") or "")[:200],
             "similarity": c.get("score") or 0,
         }
         for c in chunks
@@ -62,8 +53,11 @@ async def stream_chat(messages: list[dict]) -> AsyncIterator[str]:
                 if data == "[DONE]":
                     break
                 try:
-                    delta = json.loads(data)["choices"][0]["delta"].get("content") or ""
-                except (KeyError, IndexError, json.JSONDecodeError):
+                    payload = json.loads(data)
+                    if not isinstance(payload, dict):
+                        continue
+                    delta = payload["choices"][0]["delta"].get("content") or ""
+                except (KeyError, IndexError, TypeError, json.JSONDecodeError):
                     continue
                 if delta:
                     yield delta

@@ -18,15 +18,25 @@ class _FakeResponse:
 @pytest.mark.anyio
 async def test_search_maps_citations(monkeypatch):
     payload = {
+        "success": True,
         "result": {
-            "data": [
+            "query_kind": "text",
+            "search_query": "尖山國中",
+            "chunks": [
                 {
-                    "filename": "bills/33717.md",
-                    "score": 0.87,
-                    "content": [{"type": "text", "text": "尖山國中新建校舍…"}],
+                    "id": "abc123",
+                    "type": "text",
+                    "score": 0.6456971,
+                    "text": "尖山國中新建校舍…",
+                    "item": {
+                        "key": "bills/33717.md",
+                        "timestamp": 1783526460000,
+                        "metadata": {},
+                    },
+                    "scoring_details": {"vector_score": 0.6456971},
                 }
-            ]
-        }
+            ],
+        },
     }
 
     async def fake_post(self, url, **kwargs):
@@ -36,14 +46,14 @@ async def test_search_maps_citations(monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
     citations = await cloudflare.search("尖山國中")
     assert citations == [
-        {"doc_name": "bills/33717.md", "snippet": "尖山國中新建校舍…", "similarity": 0.87}
+        {"doc_name": "bills/33717.md", "snippet": "尖山國中新建校舍…", "similarity": 0.6456971}
     ]
 
 
 @pytest.mark.anyio
 async def test_search_handles_missing_fields(monkeypatch):
     async def fake_post(self, url, **kwargs):
-        return _FakeResponse({"result": {"data": [{}]}})
+        return _FakeResponse({"result": {"chunks": [{}]}})
 
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
     citations = await cloudflare.search("x")
@@ -72,6 +82,10 @@ class _FakeStreamResponse:
 @pytest.mark.anyio
 async def test_stream_chat_parses_sse_deltas(monkeypatch):
     lines = [
+        "event: chunks",
+        'data: [{"id": "abc123", "type": "text", "score": 0.6456971, "text": "尖山國中新建校舍…", '
+        '"item": {"key": "bills/33717.md"}}]',
+        "",
         'data: {"choices": [{"delta": {"content": "尖"}}]}',
         "",
         'data: {"choices": [{"delta": {"content": "山"}}]}',
