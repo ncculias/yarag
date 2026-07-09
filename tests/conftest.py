@@ -14,6 +14,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
 @pytest.fixture()
 def client():
     from yarag.app import app
