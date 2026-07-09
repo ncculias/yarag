@@ -1,8 +1,4 @@
-from pydantic import BaseModel, Field
-
-
-class UploadRequest(BaseModel):
-    content_type: str = Field(..., examples=["application/pdf"])
+from pydantic import BaseModel
 
 
 class UploadResponse(BaseModel):
