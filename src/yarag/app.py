@@ -36,7 +36,7 @@ app.include_router(uploads_router)
 
 
 def main() -> None:
-    uvicorn.run("yarag.app:app", reload=True)
+    uvicorn.run("yarag.app:app", reload=True, port=8010)
 
 
 if __name__ == "__main__":
