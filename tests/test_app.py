@@ -10,9 +10,15 @@ def test_cors_preflight(client):
     assert r.headers["access-control-allow-origin"] == "http://localhost:5173"
 
 
-def test_tables_created_on_startup(client):
+def test_tables_created_on_startup():
+    from fastapi.testclient import TestClient
     from sqlalchemy import inspect
 
-    from yarag.db import engine
+    from yarag.app import app
+    from yarag.db import Base, engine
 
+    Base.metadata.drop_all(engine)
+    assert set(inspect(engine).get_table_names()) == set()
+    with TestClient(app):  # 進入 lifespan → init_db()
+        pass
     assert {"users", "threads", "messages"} <= set(inspect(engine).get_table_names())
