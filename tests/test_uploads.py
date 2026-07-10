@@ -154,3 +154,18 @@ def test_uploaded_dotty_filename_is_downloadable(client, auth_headers):
     )
     key = r.json()["key"]
     assert client.get("/api/v1/documents/download", params={"key": key}, headers=auth_headers).status_code == 200
+
+
+def test_safe_filename_never_produces_double_dots(client, auth_headers):
+    adversarial = ["report.", "x.", "f" * 72 + ".", "...", ". . .", "a..b..c..pdf", "報告.", "..", "。..pdf"]
+    for name in adversarial:
+        r = client.post(
+            "/api/v1/uploads",
+            json={"content_type": "application/pdf", "file_name": name, "size_bytes": 100},
+            headers=auth_headers,
+        )
+        key = r.json()["key"]
+        assert ".." not in key, f"{name!r} -> {key!r}"
+        assert key.endswith(".pdf"), f"{name!r} -> {key!r}"
+        dl = client.get("/api/v1/documents/download", params={"key": key}, headers=auth_headers)
+        assert dl.status_code == 200, f"{name!r} -> {key!r}"

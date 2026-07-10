@@ -63,18 +63,34 @@ def _safe_filename(file_name: str, ext: str) -> str:
     name = name.strip()
     name = _WHITESPACE_RE.sub(" ", name)
     name = re.sub(r"\.{2,}", ".", name)
+    name = name.rstrip(". ")
     if not name:
         return f"file{ext}"
     name = name[:MAX_FILENAME_LEN]
+    name = name.rstrip(". ")
+    if not name:
+        return f"file{ext}"
     if not name.endswith(ext):
         stem, _, orig_ext = name.rpartition(".")
         if stem and orig_ext and len(orig_ext) <= 10:
             name = stem
+        name = name.rstrip(". ")
+        if not name:
+            return f"file{ext}"
         name = f"{name}{ext}"
         name = name[:MAX_FILENAME_LEN]
         if not name.endswith(ext):
             name = name[: MAX_FILENAME_LEN - len(ext)] + ext
-    return name
+    # Final safety pass: guarantee the returned key can never contain ".."
+    # regardless of what truncation/append steps above did to the boundary.
+    result = re.sub(r"\.{2,}", ".", name)
+    if not result.endswith(ext):
+        result = result.rstrip(". ")
+        if not result:
+            return f"file{ext}"
+        result = f"{result}{ext}"
+        result = re.sub(r"\.{2,}", ".", result)
+    return result
 
 
 def _display_name(key: str) -> str:
