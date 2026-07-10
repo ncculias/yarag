@@ -1,0 +1,10 @@
+.venv/
+.env
+*.db
+.git/
+.superpowers/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+tests/
+scripts/
