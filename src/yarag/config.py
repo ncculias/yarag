@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     cf_account_id: str = Field(init=False)
     cf_ai_search_instance: str = Field(init=False)
     cf_api_token: str = Field(init=False)
+    openai_api_key: str = Field(init=False)
+    openai_model: str = "gpt-5-mini"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

@@ -9,6 +9,7 @@ os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 os.environ.setdefault("CF_ACCOUNT_ID", "test-account")
 os.environ.setdefault("CF_AI_SEARCH_INSTANCE", "test-instance")
 os.environ.setdefault("CF_API_TOKEN", "test-cf-token")
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
 
 import pytest
 from fastapi.testclient import TestClient
