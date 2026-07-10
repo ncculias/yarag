@@ -62,3 +62,27 @@ async def test_stream_web_answer_tolerates_unknown_events(monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
     events = [e async for e in openai_client.stream_web_answer("q")]
     assert ("delta", "議會") in events and events[-1][0] == "sources"
+
+
+@pytest.mark.anyio
+async def test_stream_ends_without_completed_still_yields_empty_sources(monkeypatch):
+    lines = ['event: response.output_text.delta', 'data: {"type":"response.output_text.delta","delta":"嗨"}', '']
+
+    def fake_stream(self, method, url, **kwargs):
+        return _FakeStream(lines)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    events = [e async for e in openai_client.stream_web_answer("q")]
+    assert events == [("delta", "嗨"), ("sources", [])]
+
+
+@pytest.mark.anyio
+async def test_failed_event_raises(monkeypatch):
+    lines = ['event: response.failed', 'data: {"type":"response.failed"}', '']
+
+    def fake_stream(self, method, url, **kwargs):
+        return _FakeStream(lines)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    with pytest.raises(RuntimeError):
+        [e async for e in openai_client.stream_web_answer("q")]
