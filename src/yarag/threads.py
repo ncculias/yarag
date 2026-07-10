@@ -27,6 +27,7 @@ class MessageOut(BaseModel):
     role: str
     content: str
     citations: list[dict] | None
+    source: str
     created_at: datetime
 
 
@@ -72,6 +73,7 @@ def get_thread(
             role=m.role,
             content=m.content,
             citations=json.loads(m.citations) if m.citations else None,
+            source=m.source,
             created_at=m.created_at,
         )
         for m in thread.messages

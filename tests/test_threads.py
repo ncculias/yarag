@@ -44,6 +44,7 @@ def test_get_thread_with_citations(client, make_user, auth_headers):
     assert r.status_code == 200
     msgs = r.json()["messages"]
     assert msgs[1]["citations"][0]["doc_name"] == "33717.md"
+    assert msgs[0]["source"] == "kb"
 
 
 def test_cannot_read_others_thread(client, make_user, auth_headers):

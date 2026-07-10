@@ -43,5 +43,6 @@ class Message(Base):
     role: Mapped[str] = mapped_column(String(10))
     content: Mapped[str] = mapped_column(Text)
     citations: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(10), default="kb")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     thread = relationship("Thread", back_populates="messages")

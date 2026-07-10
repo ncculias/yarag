@@ -16,9 +16,16 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False)
 
 
 def init_db() -> None:
+    from sqlalchemy import inspect, text
+
     from yarag import models  # noqa: F401  確保模型已註冊
 
     Base.metadata.create_all(engine)
+
+    columns = {c["name"] for c in inspect(engine).get_columns("messages")}
+    if "source" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE messages ADD COLUMN source VARCHAR(10) NOT NULL DEFAULT 'kb'"))
 
 
 def get_db() -> Generator[Session]:
