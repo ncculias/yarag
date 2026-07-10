@@ -86,6 +86,61 @@ def test_chat_rejects_others_thread(client, make_user, auth_headers, monkeypatch
     assert r.status_code == 404
 
 
+def _patch_openai(monkeypatch, deltas=("網路", "答案"), sources=None):
+    from yarag import chat
+
+    if sources is None:
+        sources = [{"doc_name": "新聞A", "snippet": "…", "similarity": 0, "url": "https://n.example/a"}]
+
+    async def fake_web(question):
+        for d in deltas:
+            yield ("delta", d)
+        yield ("sources", sources)
+
+    monkeypatch.setattr(chat.openai_client, "stream_web_answer", fake_web)
+
+
+def test_web_mode_event_order_and_source(client, auth_headers, monkeypatch):
+    _patch_openai(monkeypatch)
+
+    from yarag import chat
+
+    async def boom(query):
+        raise AssertionError("web 模式不得呼叫 cloudflare")
+
+    monkeypatch.setattr(chat.cloudflare, "search", boom)
+    r = client.post(
+        "/api/v1/chat",
+        json={"message": "資料庫沒有的問題", "thread_id": None, "mode": "web"},
+        headers=auth_headers,
+    )
+    events = _parse_sse(r.text)
+    names = [e[0] for e in events]
+    assert names == ["delta", "delta", "citations", "done"]
+    assert events[-1][1]["source"] == "web"
+    tid = events[-1][1]["thread_id"]
+    detail = client.get(f"/api/v1/threads/{tid}", headers=auth_headers).json()
+    assert detail["messages"][1]["source"] == "web"
+    assert detail["messages"][1]["citations"][0]["url"] == "https://n.example/a"
+
+
+def test_kb_mode_unchanged_with_source(client, auth_headers, monkeypatch):
+    _patch_cloudflare(monkeypatch)
+    r = client.post(
+        "/api/v1/chat", json={"message": "尖山國中？", "thread_id": None}, headers=auth_headers
+    )
+    events = _parse_sse(r.text)
+    assert [e[0] for e in events] == ["citations", "delta", "delta", "done"]
+    assert events[-1][1]["source"] == "kb"
+
+
+def test_invalid_mode_rejected(client, auth_headers):
+    r = client.post(
+        "/api/v1/chat", json={"message": "x", "thread_id": None, "mode": "magic"}, headers=auth_headers
+    )
+    assert r.status_code == 422
+
+
 def test_chat_bumps_thread_to_top_on_followup(client, auth_headers, monkeypatch):
     _patch_cloudflare(monkeypatch)
     first = client.post(
