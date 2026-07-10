@@ -62,6 +62,7 @@ def _safe_filename(file_name: str, ext: str) -> str:
     name = _CONTROL_CHARS_RE.sub("", name)
     name = name.strip()
     name = _WHITESPACE_RE.sub(" ", name)
+    name = re.sub(r"\.{2,}", ".", name)
     if not name:
         return f"file{ext}"
     name = name[:MAX_FILENAME_LEN]

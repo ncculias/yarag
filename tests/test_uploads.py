@@ -133,3 +133,24 @@ def test_download_rejects_bad_key(client, auth_headers):
 
 def test_download_requires_auth(client):
     assert client.get("/api/v1/documents/download", params={"key": "x.md"}).status_code == 401
+
+
+def test_upload_filename_consecutive_dots_collapsed(client, auth_headers):
+    r = client.post(
+        "/api/v1/uploads",
+        json={"content_type": "application/pdf", "file_name": "v1..final.pdf", "size_bytes": 100},
+        headers=auth_headers,
+    )
+    key = r.json()["key"]
+    assert ".." not in key
+    assert key.endswith("v1.final.pdf")
+
+
+def test_uploaded_dotty_filename_is_downloadable(client, auth_headers):
+    r = client.post(
+        "/api/v1/uploads",
+        json={"content_type": "application/pdf", "file_name": "報告...v2.pdf", "size_bytes": 100},
+        headers=auth_headers,
+    )
+    key = r.json()["key"]
+    assert client.get("/api/v1/documents/download", params={"key": key}, headers=auth_headers).status_code == 200
