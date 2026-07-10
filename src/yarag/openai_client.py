@@ -44,30 +44,28 @@ async def stream_web_answer(question: str) -> AsyncIterator[tuple[str, object]]:
         "stream": True,
     }
     headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
+    sources_yielded = False
     async with httpx.AsyncClient(timeout=120) as client:
         async with client.stream("POST", _URL, headers=headers, json=body) as resp:
             resp.raise_for_status()
-            sources_yielded = False
-            try:
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    try:
-                        payload = json.loads(line[6:])
-                    except json.JSONDecodeError:
-                        continue
-                    if not isinstance(payload, dict):
-                        continue
-                    kind = payload.get("type")
-                    if kind == "response.output_text.delta":
-                        delta = payload.get("delta") or ""
-                        if delta:
-                            yield ("delta", delta)
-                    elif kind == "response.completed":
-                        yield ("sources", _extract_sources(payload))
-                        sources_yielded = True
-                    elif kind in ("response.failed", "response.incomplete", "error"):
-                        raise RuntimeError(f"openai stream failed: {kind}")
-            finally:
-                if not sources_yielded:
-                    yield ("sources", [])
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                try:
+                    payload = json.loads(line[6:])
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                kind = payload.get("type")
+                if kind == "response.output_text.delta":
+                    delta = payload.get("delta") or ""
+                    if delta:
+                        yield ("delta", delta)
+                elif kind == "response.completed":
+                    sources_yielded = True
+                    yield ("sources", _extract_sources(payload))
+                elif kind in ("response.failed", "response.incomplete", "error"):
+                    raise RuntimeError(f"openai stream failed: {kind}")
+    if not sources_yielded:
+        yield ("sources", [])

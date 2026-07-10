@@ -77,12 +77,15 @@ async def test_stream_ends_without_completed_still_yields_empty_sources(monkeypa
 
 
 @pytest.mark.anyio
-async def test_failed_event_raises(monkeypatch):
+async def test_failed_event_raises_without_any_sources_yield(monkeypatch):
     lines = ['event: response.failed', 'data: {"type":"response.failed"}', '']
 
     def fake_stream(self, method, url, **kwargs):
         return _FakeStream(lines)
 
     monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+    received = []
     with pytest.raises(RuntimeError):
-        [e async for e in openai_client.stream_web_answer("q")]
+        async for event in openai_client.stream_web_answer("q"):
+            received.append(event)
+    assert received == []
