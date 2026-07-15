@@ -98,7 +98,7 @@ def _display_name(key: str) -> str:
     return _KEY_PREFIX_RE.sub("", tail)
 
 
-_CONTENT_MIN_CHARS = 19
+_CONTENT_MIN_CHARS = 20
 
 
 def _content_is_empty(text: str) -> bool:

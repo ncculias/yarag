@@ -186,6 +186,6 @@ def test_content_is_empty_false_when_body_present():
 
     real = (
         "# 遠雄.pdf\n## Metadata\n- PDFFormatVersion=1.7\n\n\n"
-        "## Contents\n### Page 1\n物品出入區申請表 申請人 部門 主管簽核 日期"
+        "## Contents\n### Page 1\n物品出入區申請表 申請人姓名 所屬部門單位 主管簽核意見 申請日期 用途說明欄"
     )
     assert _content_is_empty(real) is False
