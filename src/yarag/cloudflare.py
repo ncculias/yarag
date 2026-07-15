@@ -73,7 +73,7 @@ def list_item_status() -> dict[str, dict]:
     with httpx.Client(timeout=30) as client:
         while True:
             resp = client.get(
-                _url("/items"), headers=_headers(), params={"page": page, "per_page": 100}
+                _url("/items"), headers=_headers(), params={"page": page, "per_page": 50}
             )
             resp.raise_for_status()
             batch = resp.json().get("result") or []
@@ -81,7 +81,7 @@ def list_item_status() -> dict[str, dict]:
                 key = it.get("key")
                 if key:
                     items[key] = it
-            if len(batch) < 100:
+            if len(batch) < 50:
                 break
             page += 1
     return items

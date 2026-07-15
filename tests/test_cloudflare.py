@@ -122,27 +122,28 @@ def test_list_item_status_paginates(monkeypatch):
         1: {
             "result": [
                 {"key": f"bills/{i}.md", "status": "completed", "checksum": f"c{i}", "error": None}
-                for i in range(100)
+                for i in range(50)
             ],
-            "result_info": {"total_count": 101},
+            "result_info": {"total_count": 51},
         },
         2: {
             "result": [
-                {"key": "bills/100.md", "status": "completed", "checksum": "c100", "error": None}
+                {"key": "bills/50.md", "status": "completed", "checksum": "c50", "error": None}
             ],
-            "result_info": {"total_count": 101},
+            "result_info": {"total_count": 51},
         },
     }
 
     def fake_get(self, url, **kwargs):
         assert "/items" in url
         assert kwargs["headers"]["Authorization"] == "Bearer test-cf-token"
+        assert kwargs["params"]["per_page"] == 50
         return _SyncResp(pages[kwargs["params"]["page"]])
 
     monkeypatch.setattr(httpx.Client, "get", fake_get)
     m = cloudflare.list_item_status()
-    assert len(m) == 101
-    assert m["bills/100.md"]["checksum"] == "c100"
+    assert len(m) == 51
+    assert m["bills/50.md"]["checksum"] == "c50"
 
 
 def test_retrieve_text_filters_by_key(monkeypatch):
