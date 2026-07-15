@@ -169,3 +169,23 @@ def test_safe_filename_never_produces_double_dots(client, auth_headers):
         assert key.endswith(".pdf"), f"{name!r} -> {key!r}"
         dl = client.get("/api/v1/documents/download", params={"key": key}, headers=auth_headers)
         assert dl.status_code == 200, f"{name!r} -> {key!r}"
+
+
+def test_content_is_empty_detects_metadata_only():
+    from yarag.uploads import _content_is_empty
+
+    metadata_only = (
+        "# 0871b1f0-TARG.pdf\n## Metadata\n- PDFFormatVersion=1.7\n"
+        "- Author=someone\n\n\n## Contents\n### Page 1"
+    )
+    assert _content_is_empty(metadata_only) is True
+
+
+def test_content_is_empty_false_when_body_present():
+    from yarag.uploads import _content_is_empty
+
+    real = (
+        "# 遠雄.pdf\n## Metadata\n- PDFFormatVersion=1.7\n\n\n"
+        "## Contents\n### Page 1\n物品出入區申請表 申請人 部門 主管簽核 日期"
+    )
+    assert _content_is_empty(real) is False

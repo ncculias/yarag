@@ -24,3 +24,13 @@ def test_create_user_thread_message():
         loaded = db.scalar(select(User).where(User.username == "alice"))
         assert loaded is not None and loaded.is_active and not loaded.is_admin
         assert db.scalar(select(Message).where(Message.thread_id == thread.id)).content == "哈囉"
+
+
+def test_document_content_check_table_created():
+    from sqlalchemy import inspect
+
+    from yarag.db import Base, engine, init_db
+
+    Base.metadata.drop_all(engine)
+    init_db()
+    assert "document_content_checks" in inspect(engine).get_table_names()

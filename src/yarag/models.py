@@ -46,3 +46,10 @@ class Message(Base):
     source: Mapped[str] = mapped_column(String(10), default="kb")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     thread = relationship("Thread", back_populates="messages")
+
+
+class DocumentContentCheck(Base):
+    __tablename__ = "document_content_checks"
+    checksum: Mapped[str] = mapped_column(String(64), primary_key=True)
+    is_empty: Mapped[bool] = mapped_column(Boolean)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

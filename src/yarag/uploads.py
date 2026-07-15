@@ -98,6 +98,17 @@ def _display_name(key: str) -> str:
     return _KEY_PREFIX_RE.sub("", tail)
 
 
+_CONTENT_MIN_CHARS = 19
+
+
+def _content_is_empty(text: str) -> bool:
+    # 取 "## Contents" 之後的正文；沒有則視整體
+    body = text.split("## Contents", 1)[-1]
+    body = re.sub(r"(?m)^\s*#+.*$", "", body)  # 標題行（含 ### Page N）
+    body = re.sub(r"(?m)^\s*[-*]\s.*$", "", body)  # 清單行（metadata 殘留）
+    return len(re.sub(r"\s+", "", body)) < _CONTENT_MIN_CHARS
+
+
 @router.post("/uploads", status_code=status.HTTP_201_CREATED)
 def generate_upload_url(
     req: UploadRequest, user: User = Depends(get_current_user)
