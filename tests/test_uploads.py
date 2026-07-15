@@ -29,6 +29,8 @@ def fake_s3(monkeypatch):
             return _P()
 
     monkeypatch.setattr(uploads, "s3_client", _FakeS3())
+    monkeypatch.setattr(uploads.cloudflare, "list_item_status", lambda: {}, raising=False)
+    monkeypatch.setattr(uploads.cloudflare, "retrieve_text", lambda q, k: "", raising=False)
 
 
 def _req(content_type="application/pdf", size=1024):
@@ -189,3 +191,83 @@ def test_content_is_empty_false_when_body_present():
         "## Contents\n### Page 1\n物品出入區申請表 申請人姓名 所屬部門單位 主管簽核意見 申請日期 用途說明欄"
     )
     assert _content_is_empty(real) is False
+
+
+def _patch_status(monkeypatch, status_map, text=""):
+    from yarag import uploads
+
+    monkeypatch.setattr(uploads.cloudflare, "list_item_status", lambda: status_map)
+    monkeypatch.setattr(uploads.cloudflare, "retrieve_text", lambda q, k: text)
+
+
+def test_documents_status_ready_for_markdown(client, auth_headers, monkeypatch):
+    _patch_status(monkeypatch, {"bills/33717.md": {"status": "completed", "checksum": "c1", "error": None}})
+    docs = client.get("/api/v1/documents", headers=auth_headers).json()
+    assert docs[0]["index_status"] == "ready"
+
+
+def test_documents_status_indexing_when_absent(client, auth_headers, monkeypatch):
+    _patch_status(monkeypatch, {})  # key 不在 items
+    docs = client.get("/api/v1/documents", headers=auth_headers).json()
+    assert docs[0]["index_status"] == "indexing"
+
+
+def test_documents_status_failed_on_error(client, auth_headers, monkeypatch):
+    _patch_status(monkeypatch, {"bills/33717.md": {"status": "completed", "checksum": "c1", "error": "boom"}})
+    docs = client.get("/api/v1/documents", headers=auth_headers).json()
+    assert docs[0]["index_status"] == "failed"
+
+
+def test_documents_status_indexing_when_cloudflare_down(client, auth_headers, monkeypatch):
+    from yarag import uploads
+
+    def boom():
+        raise RuntimeError("cf down")
+
+    monkeypatch.setattr(uploads.cloudflare, "list_item_status", boom)
+    docs = client.get("/api/v1/documents", headers=auth_headers).json()
+    assert docs[0]["index_status"] == "indexing"  # 安全退預設，列表仍回
+
+
+def test_documents_status_empty_for_pdf_without_text(client, auth_headers, monkeypatch):
+    from yarag import uploads
+
+    class _P:
+        def paginate(self, **kw):
+            import datetime
+
+            key = "2026/07/15/aa11bb22-scan.pdf"
+            entry = {"Key": key, "Size": 9, "LastModified": datetime.datetime(2026, 7, 15)}
+            return [{"Contents": [entry]}]
+
+    monkeypatch.setattr(uploads.s3_client, "get_paginator", lambda name: _P())
+    _patch_status(
+        monkeypatch,
+        {"2026/07/15/aa11bb22-scan.pdf": {"status": "completed", "checksum": "cX", "error": None}},
+        text="# scan.pdf\n## Metadata\n- x\n\n\n## Contents\n### Page 1",
+    )
+    docs = client.get("/api/v1/documents", headers=auth_headers).json()
+    assert docs[0]["index_status"] == "empty"
+
+
+def test_sync_endpoint_triggers_and_returns_job(client, auth_headers, monkeypatch):
+    from yarag import uploads
+
+    monkeypatch.setattr(uploads.cloudflare, "trigger_sync", lambda: "job-9")
+    r = client.post("/api/v1/documents/sync", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["job_id"] == "job-9"
+
+
+def test_sync_endpoint_requires_auth(client):
+    assert client.post("/api/v1/documents/sync").status_code == 401
+
+
+def test_sync_endpoint_502_on_failure(client, auth_headers, monkeypatch):
+    from yarag import uploads
+
+    def boom():
+        raise RuntimeError("cf down")
+
+    monkeypatch.setattr(uploads.cloudflare, "trigger_sync", boom)
+    assert client.post("/api/v1/documents/sync", headers=auth_headers).status_code == 502

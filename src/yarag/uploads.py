@@ -9,10 +9,13 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from yarag import cloudflare
 from yarag.auth import get_current_user
 from yarag.config import settings
-from yarag.models import User
+from yarag.db import get_db
+from yarag.models import DocumentContentCheck, User
 from yarag.schemas import DownloadResponse, UploadResponse
 
 router = APIRouter(prefix="/api/v1", tags=["uploads"])
@@ -48,6 +51,7 @@ class DocumentOut(BaseModel):
     size_bytes: int
     updated_at: datetime
     display_name: str
+    index_status: str
 
 
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
@@ -142,18 +146,60 @@ def generate_upload_url(
     )
 
 
+_CHECKED_EXTS = (".pdf", ".docx", ".xlsx")
+
+
+def _cached_is_empty(db: Session, key: str, item: dict) -> bool:
+    checksum = item.get("checksum") or ""
+    if checksum:
+        cached = db.get(DocumentContentCheck, checksum)
+        if cached is not None:
+            return cached.is_empty
+    query = _display_name(key).rsplit(".", 1)[0]
+    empty = _content_is_empty(cloudflare.retrieve_text(query, key))
+    if checksum:
+        db.add(DocumentContentCheck(checksum=checksum, is_empty=empty))
+        db.commit()
+    return empty
+
+
+def _derive_status(db: Session, key: str, item: dict | None) -> str:
+    if item is None:
+        return "indexing"
+    if item.get("error") or item.get("status") in {"error", "failed"}:
+        return "failed"
+    if item.get("status") != "completed":
+        return "indexing"
+    if not key.lower().endswith(_CHECKED_EXTS):
+        return "ready"  # md/txt 一定有文字
+    try:
+        return "empty" if _cached_is_empty(db, key, item) else "ready"
+    except Exception:
+        logger.exception("content check failed", extra={"key": key})
+        return "indexing"  # 判不出來時安全退，不誤報 ready/empty
+
+
 @router.get("/documents")
-def list_documents(user: User = Depends(get_current_user)) -> list[DocumentOut]:
+def list_documents(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> list[DocumentOut]:
+    try:
+        status_map = cloudflare.list_item_status()
+    except Exception:
+        logger.exception("list_item_status failed")
+        status_map = {}
     paginator = s3_client.get_paginator("list_objects_v2")
     docs = []
     for page in paginator.paginate(Bucket=settings.default_bucket):
         for obj in page.get("Contents", []):
+            key = obj["Key"]
             docs.append(
                 DocumentOut(
-                    name=obj["Key"],
+                    name=key,
                     size_bytes=obj["Size"],
                     updated_at=obj["LastModified"],
-                    display_name=_display_name(obj["Key"]),
+                    display_name=_display_name(key),
+                    index_status=_derive_status(db, key, status_map.get(key)),
                 )
             )
     docs.sort(key=lambda d: d.updated_at, reverse=True)
@@ -179,3 +225,13 @@ def download_document(key: str, user: User = Depends(get_current_user)) -> Downl
         logger.exception("presign failed", extra={"key": key})
         raise HTTPException(status_code=500, detail="無法產生下載網址") from e
     return DownloadResponse(download_url=download_url, expires_in=settings.default_expires_in)
+
+
+@router.post("/documents/sync")
+def sync_documents(user: User = Depends(get_current_user)) -> dict[str, str]:
+    try:
+        job_id = cloudflare.trigger_sync()
+    except Exception as e:
+        logger.exception("trigger_sync failed")
+        raise HTTPException(status_code=502, detail="無法觸發索引同步，稍後會由排程自動處理") from e
+    return {"job_id": job_id}
