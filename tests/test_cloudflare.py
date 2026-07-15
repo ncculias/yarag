@@ -119,8 +119,19 @@ class _SyncResp:
 
 def test_list_item_status_paginates(monkeypatch):
     pages = {
-        1: {"result": [{"key": f"bills/{i}.md", "status": "completed", "checksum": f"c{i}", "error": None} for i in range(100)], "result_info": {"total_count": 101}},
-        2: {"result": [{"key": "bills/100.md", "status": "completed", "checksum": "c100", "error": None}], "result_info": {"total_count": 101}},
+        1: {
+            "result": [
+                {"key": f"bills/{i}.md", "status": "completed", "checksum": f"c{i}", "error": None}
+                for i in range(100)
+            ],
+            "result_info": {"total_count": 101},
+        },
+        2: {
+            "result": [
+                {"key": "bills/100.md", "status": "completed", "checksum": "c100", "error": None}
+            ],
+            "result_info": {"total_count": 101},
+        },
     }
 
     def fake_get(self, url, **kwargs):
