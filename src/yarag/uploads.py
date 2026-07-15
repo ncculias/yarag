@@ -149,14 +149,17 @@ def generate_upload_url(
 _CHECKED_EXTS = (".pdf", ".docx", ".xlsx")
 
 
-def _cached_is_empty(db: Session, key: str, item: dict) -> bool:
+def _cached_is_empty(db: Session, key: str, item: dict) -> bool | None:
     checksum = item.get("checksum") or ""
     if checksum:
         cached = db.get(DocumentContentCheck, checksum)
         if cached is not None:
             return cached.is_empty
     query = _display_name(key).rsplit(".", 1)[0]
-    empty = _content_is_empty(cloudflare.retrieve_text(query, key))
+    text = cloudflare.retrieve_text(query, key)
+    if not text.strip():
+        return None  # 搜尋未回傳此檔 chunk（排名未命中）→ 未定，不誤判 empty、不快取
+    empty = _content_is_empty(text)
     if checksum:
         db.add(DocumentContentCheck(checksum=checksum, is_empty=empty))
         try:
@@ -176,10 +179,13 @@ def _derive_status(db: Session, key: str, item: dict | None) -> str:
     if not key.lower().endswith(_CHECKED_EXTS):
         return "ready"  # md/txt 一定有文字
     try:
-        return "empty" if _cached_is_empty(db, key, item) else "ready"
+        result = _cached_is_empty(db, key, item)
     except Exception:
         logger.exception("content check failed", extra={"key": key})
         return "indexing"  # 判不出來時安全退，不誤報 ready/empty
+    if result is None:
+        return "indexing"  # 未定（搜尋未命中此檔）
+    return "empty" if result else "ready"
 
 
 @router.get("/documents")
