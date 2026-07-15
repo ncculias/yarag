@@ -159,7 +159,10 @@ def _cached_is_empty(db: Session, key: str, item: dict) -> bool:
     empty = _content_is_empty(cloudflare.retrieve_text(query, key))
     if checksum:
         db.add(DocumentContentCheck(checksum=checksum, is_empty=empty))
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()  # 提交失敗（如並發撞 PK）不污染 session，避免同請求後續文件連鎖降級
     return empty
 
 
