@@ -125,6 +125,7 @@ def test_list_item_status_paginates(monkeypatch):
 
     def fake_get(self, url, **kwargs):
         assert "/items" in url
+        assert kwargs["headers"]["Authorization"] == "Bearer test-cf-token"
         return _SyncResp(pages[kwargs["params"]["page"]])
 
     monkeypatch.setattr(httpx.Client, "get", fake_get)
@@ -141,6 +142,7 @@ def test_retrieve_text_filters_by_key(monkeypatch):
 
     def fake_post(self, url, **kwargs):
         assert "/search" in url
+        assert kwargs["headers"]["Authorization"] == "Bearer test-cf-token"
         return _SyncResp(payload)
 
     monkeypatch.setattr(httpx.Client, "post", fake_post)
