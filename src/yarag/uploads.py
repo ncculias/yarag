@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 import uuid
 from datetime import UTC, datetime
 from urllib.parse import quote
@@ -51,7 +52,6 @@ class DocumentOut(BaseModel):
     size_bytes: int
     updated_at: datetime
     display_name: str
-    index_status: str
 
 
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
@@ -188,15 +188,17 @@ def _derive_status(db: Session, key: str, item: dict | None) -> str:
     return "empty" if result else "ready"
 
 
+_STATUS_CACHE_TTL = 8.0
+_status_cache: dict = {"at": None, "map": {}}
+
+
+def _reset_status_cache() -> None:
+    _status_cache["at"] = None
+    _status_cache["map"] = {}
+
+
 @router.get("/documents")
-def list_documents(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
-) -> list[DocumentOut]:
-    try:
-        status_map = cloudflare.list_item_status()
-    except Exception:
-        logger.exception("list_item_status failed")
-        status_map = {}
+def list_documents(user: User = Depends(get_current_user)) -> list[DocumentOut]:
     paginator = s3_client.get_paginator("list_objects_v2")
     docs = []
     for page in paginator.paginate(Bucket=settings.default_bucket):
@@ -208,11 +210,29 @@ def list_documents(
                     size_bytes=obj["Size"],
                     updated_at=obj["LastModified"],
                     display_name=_display_name(key),
-                    index_status=_derive_status(db, key, status_map.get(key)),
                 )
             )
     docs.sort(key=lambda d: d.updated_at, reverse=True)
     return docs
+
+
+@router.get("/documents/status")
+def documents_status(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> dict[str, str]:
+    now = time.monotonic()
+    at = _status_cache["at"]
+    if at is not None and (now - at) < _STATUS_CACHE_TTL:
+        return _status_cache["map"]
+    try:
+        status_map = cloudflare.list_item_status()
+    except Exception:
+        logger.exception("list_item_status failed")
+        return {}  # 前端保持「檢查中」，不寫快取
+    result = {key: _derive_status(db, key, item) for key, item in status_map.items()}
+    _status_cache["at"] = now
+    _status_cache["map"] = result
+    return result
 
 
 @router.get("/documents/download")

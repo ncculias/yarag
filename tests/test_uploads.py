@@ -31,6 +31,7 @@ def fake_s3(monkeypatch):
     monkeypatch.setattr(uploads, "s3_client", _FakeS3())
     monkeypatch.setattr(uploads.cloudflare, "list_item_status", lambda: {}, raising=False)
     monkeypatch.setattr(uploads.cloudflare, "retrieve_text", lambda q, k: "", raising=False)
+    uploads._reset_status_cache()
 
 
 def _req(content_type="application/pdf", size=1024):
@@ -200,54 +201,130 @@ def _patch_status(monkeypatch, status_map, text=""):
     monkeypatch.setattr(uploads.cloudflare, "retrieve_text", lambda q, k: text)
 
 
-def test_documents_status_ready_for_markdown(client, auth_headers, monkeypatch):
+def test_status_ready_for_markdown(client, auth_headers, monkeypatch):
     _patch_status(monkeypatch, {"bills/33717.md": {"status": "completed", "checksum": "c1", "error": None}})
-    docs = client.get("/api/v1/documents", headers=auth_headers).json()
-    assert docs[0]["index_status"] == "ready"
+    m = client.get("/api/v1/documents/status", headers=auth_headers).json()
+    assert m["bills/33717.md"] == "ready"
 
 
-def test_documents_status_indexing_when_absent(client, auth_headers, monkeypatch):
-    _patch_status(monkeypatch, {})  # key 不在 items
-    docs = client.get("/api/v1/documents", headers=auth_headers).json()
-    assert docs[0]["index_status"] == "indexing"
+def test_status_omits_unindexed_key(client, auth_headers, monkeypatch):
+    _patch_status(monkeypatch, {})  # Cloudflare 尚未掃到任何檔
+    m = client.get("/api/v1/documents/status", headers=auth_headers).json()
+    assert m == {}  # 不含該 key → 前端預設 indexing
 
 
-def test_documents_status_failed_on_error(client, auth_headers, monkeypatch):
+def test_status_failed_on_error(client, auth_headers, monkeypatch):
     _patch_status(monkeypatch, {"bills/33717.md": {"status": "completed", "checksum": "c1", "error": "boom"}})
-    docs = client.get("/api/v1/documents", headers=auth_headers).json()
-    assert docs[0]["index_status"] == "failed"
+    m = client.get("/api/v1/documents/status", headers=auth_headers).json()
+    assert m["bills/33717.md"] == "failed"
 
 
-def test_documents_status_indexing_when_cloudflare_down(client, auth_headers, monkeypatch):
+def test_status_empty_when_cloudflare_down(client, auth_headers, monkeypatch):
     from yarag import uploads
 
     def boom():
         raise RuntimeError("cf down")
 
     monkeypatch.setattr(uploads.cloudflare, "list_item_status", boom)
-    docs = client.get("/api/v1/documents", headers=auth_headers).json()
-    assert docs[0]["index_status"] == "indexing"  # 安全退預設，列表仍回
+    m = client.get("/api/v1/documents/status", headers=auth_headers).json()
+    assert m == {}  # 前端保持檢查中
 
 
-def test_documents_status_empty_for_pdf_without_text(client, auth_headers, monkeypatch):
-    from yarag import uploads
-
-    class _P:
-        def paginate(self, **kw):
-            import datetime
-
-            key = "2026/07/15/aa11bb22-scan.pdf"
-            entry = {"Key": key, "Size": 9, "LastModified": datetime.datetime(2026, 7, 15)}
-            return [{"Contents": [entry]}]
-
-    monkeypatch.setattr(uploads.s3_client, "get_paginator", lambda name: _P())
+def test_status_empty_for_pdf_without_text(client, auth_headers, monkeypatch):
     _patch_status(
         monkeypatch,
         {"2026/07/15/aa11bb22-scan.pdf": {"status": "completed", "checksum": "cX", "error": None}},
         text="# scan.pdf\n## Metadata\n- x\n\n\n## Contents\n### Page 1",
     )
-    docs = client.get("/api/v1/documents", headers=auth_headers).json()
-    assert docs[0]["index_status"] == "empty"
+    m = client.get("/api/v1/documents/status", headers=auth_headers).json()
+    assert m["2026/07/15/aa11bb22-scan.pdf"] == "empty"
+
+
+def test_status_ready_for_pdf_with_text(client, auth_headers, monkeypatch):
+    _patch_status(
+        monkeypatch,
+        {"2026/07/15/aa11bb22-real.pdf": {"status": "completed", "checksum": "cR", "error": None}},
+        text="# real.pdf\n## Metadata\n- x\n\n\n## Contents\n### Page 1\n"
+        "這是一份有實際文字內容的申請表單資料內容很多字足夠",
+    )
+    m = client.get("/api/v1/documents/status", headers=auth_headers).json()
+    assert m["2026/07/15/aa11bb22-real.pdf"] == "ready"
+
+
+def test_status_indexing_when_content_check_fails(client, auth_headers, monkeypatch):
+    from yarag import uploads
+
+    monkeypatch.setattr(
+        uploads.cloudflare,
+        "list_item_status",
+        lambda: {"2026/07/15/aa11bb22-x.pdf": {"status": "completed", "checksum": "cF", "error": None}},
+    )
+
+    def boom(q, k):
+        raise RuntimeError("search down")
+
+    monkeypatch.setattr(uploads.cloudflare, "retrieve_text", boom)
+    m = client.get("/api/v1/documents/status", headers=auth_headers).json()
+    assert m["2026/07/15/aa11bb22-x.pdf"] == "indexing"
+
+
+def test_status_indexing_for_processing(client, auth_headers, monkeypatch):
+    _patch_status(monkeypatch, {"bills/33717.md": {"status": "processing", "checksum": "cP", "error": None}})
+    m = client.get("/api/v1/documents/status", headers=auth_headers).json()
+    assert m["bills/33717.md"] == "indexing"
+
+
+def test_status_indexing_when_key_not_in_search(client, auth_headers, monkeypatch):
+    from yarag import uploads
+
+    monkeypatch.setattr(
+        uploads.cloudflare,
+        "list_item_status",
+        lambda: {"2026/07/15/aa11bb22-miss.pdf": {"status": "completed", "checksum": "cMISS", "error": None}},
+    )
+    monkeypatch.setattr(uploads.cloudflare, "retrieve_text", lambda q, k: "")
+    m = client.get("/api/v1/documents/status", headers=auth_headers).json()
+    assert m["2026/07/15/aa11bb22-miss.pdf"] == "indexing"
+
+
+def test_status_content_check_cached(client, auth_headers, monkeypatch):
+    from yarag import uploads
+
+    monkeypatch.setattr(
+        uploads.cloudflare,
+        "list_item_status",
+        lambda: {"2026/07/15/aa11bb22-c.pdf": {"status": "completed", "checksum": "cCACHE", "error": None}},
+    )
+    calls = {"n": 0}
+
+    def counting(q, k):
+        calls["n"] += 1
+        return "# c.pdf\n## Metadata\n\n\n## Contents\n### Page 1"
+
+    monkeypatch.setattr(uploads.cloudflare, "retrieve_text", counting)
+    client.get("/api/v1/documents/status", headers=auth_headers)
+    uploads._reset_status_cache()  # 清記憶體快取，強制重算以驗證 checksum DB 快取
+    client.get("/api/v1/documents/status", headers=auth_headers)
+    assert calls["n"] == 1  # 第二次靠 checksum DB 快取，不重打 search
+
+
+def test_status_endpoint_requires_auth(client):
+    assert client.get("/api/v1/documents/status").status_code == 401
+
+
+def test_status_uses_memory_cache(client, auth_headers, monkeypatch):
+    from yarag import uploads
+
+    calls = {"n": 0}
+
+    def counting_list():
+        calls["n"] += 1
+        return {"bills/33717.md": {"status": "completed", "checksum": "c1", "error": None}}
+
+    monkeypatch.setattr(uploads.cloudflare, "list_item_status", counting_list)
+    client.get("/api/v1/documents/status", headers=auth_headers)
+    client.get("/api/v1/documents/status", headers=auth_headers)
+    assert calls["n"] == 1  # 第二次在 8 秒 TTL 內，命中記憶體快取、不重打 Cloudflare
 
 
 def test_sync_endpoint_triggers_and_returns_job(client, auth_headers, monkeypatch):
@@ -271,104 +348,3 @@ def test_sync_endpoint_502_on_failure(client, auth_headers, monkeypatch):
 
     monkeypatch.setattr(uploads.cloudflare, "trigger_sync", boom)
     assert client.post("/api/v1/documents/sync", headers=auth_headers).status_code == 502
-
-
-def test_documents_status_ready_for_pdf_with_text(client, auth_headers, monkeypatch):
-    from yarag import uploads
-
-    class _P:
-        def paginate(self, **kw):
-            import datetime
-            key = "2026/07/15/aa11bb22-real.pdf"
-            entry = {"Key": key, "Size": 9, "LastModified": datetime.datetime(2026, 7, 15)}
-            return [{"Contents": [entry]}]
-
-    monkeypatch.setattr(uploads.s3_client, "get_paginator", lambda name: _P())
-    _patch_status(
-        monkeypatch,
-        {"2026/07/15/aa11bb22-real.pdf": {"status": "completed", "checksum": "cR", "error": None}},
-        text="# real.pdf\n## Metadata\n- x\n\n\n## Contents\n### Page 1\n"
-        "這是一份有實際文字內容的申請表單資料內容很多字足夠",
-    )
-    docs = client.get("/api/v1/documents", headers=auth_headers).json()
-    assert docs[0]["index_status"] == "ready"
-
-
-def test_documents_status_indexing_when_content_check_fails(client, auth_headers, monkeypatch):
-    from yarag import uploads
-
-    class _P:
-        def paginate(self, **kw):
-            import datetime
-            key = "2026/07/15/aa11bb22-x.pdf"
-            entry = {"Key": key, "Size": 9, "LastModified": datetime.datetime(2026, 7, 15)}
-            return [{"Contents": [entry]}]
-
-    monkeypatch.setattr(uploads.s3_client, "get_paginator", lambda name: _P())
-    monkeypatch.setattr(
-        uploads.cloudflare,
-        "list_item_status",
-        lambda: {"2026/07/15/aa11bb22-x.pdf": {"status": "completed", "checksum": "cF", "error": None}},
-    )
-
-    def boom(q, k):
-        raise RuntimeError("search down")
-
-    monkeypatch.setattr(uploads.cloudflare, "retrieve_text", boom)
-    docs = client.get("/api/v1/documents", headers=auth_headers).json()
-    assert docs[0]["index_status"] == "indexing"
-
-
-def test_documents_status_indexing_for_processing(client, auth_headers, monkeypatch):
-    _patch_status(monkeypatch, {"bills/33717.md": {"status": "processing", "checksum": "cP", "error": None}})
-    docs = client.get("/api/v1/documents", headers=auth_headers).json()
-    assert docs[0]["index_status"] == "indexing"
-
-
-def test_documents_content_check_cached(client, auth_headers, monkeypatch):
-    from yarag import uploads
-
-    class _P:
-        def paginate(self, **kw):
-            import datetime
-            key = "2026/07/15/aa11bb22-c.pdf"
-            entry = {"Key": key, "Size": 9, "LastModified": datetime.datetime(2026, 7, 15)}
-            return [{"Contents": [entry]}]
-
-    monkeypatch.setattr(uploads.s3_client, "get_paginator", lambda name: _P())
-    monkeypatch.setattr(
-        uploads.cloudflare,
-        "list_item_status",
-        lambda: {"2026/07/15/aa11bb22-c.pdf": {"status": "completed", "checksum": "cCACHE", "error": None}},
-    )
-    calls = {"n": 0}
-
-    def counting(q, k):
-        calls["n"] += 1
-        return "# c.pdf\n## Metadata\n\n\n## Contents\n### Page 1"
-
-    monkeypatch.setattr(uploads.cloudflare, "retrieve_text", counting)
-    client.get("/api/v1/documents", headers=auth_headers)
-    client.get("/api/v1/documents", headers=auth_headers)
-    assert calls["n"] == 1  # 第二次命中 checksum 快取，不重打 search
-
-
-def test_documents_status_indexing_when_key_not_in_search(client, auth_headers, monkeypatch):
-    from yarag import uploads
-
-    class _P:
-        def paginate(self, **kw):
-            import datetime
-            key = "2026/07/15/aa11bb22-miss.pdf"
-            entry = {"Key": key, "Size": 9, "LastModified": datetime.datetime(2026, 7, 15)}
-            return [{"Contents": [entry]}]
-
-    monkeypatch.setattr(uploads.s3_client, "get_paginator", lambda name: _P())
-    monkeypatch.setattr(
-        uploads.cloudflare,
-        "list_item_status",
-        lambda: {"2026/07/15/aa11bb22-miss.pdf": {"status": "completed", "checksum": "cMISS", "error": None}},
-    )
-    monkeypatch.setattr(uploads.cloudflare, "retrieve_text", lambda q, k: "")  # 搜尋未命中此檔
-    docs = client.get("/api/v1/documents", headers=auth_headers).json()
-    assert docs[0]["index_status"] == "indexing"  # 未定，不誤判 empty
