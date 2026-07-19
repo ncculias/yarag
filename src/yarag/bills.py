@@ -24,4 +24,7 @@ def fetch_bill(bill_id: str) -> str | None:
         obj = s3_client.get_object(Bucket=settings.default_bucket, Key=key)
         return obj["Body"].read().decode("utf-8")
     except Exception:
-        return None  # 不存在或讀取失敗：視為非議案編號，走原流程
+        # 查無此檔屬正常情形（數字未必是議案編號）；但設定/認證錯誤也會走到這裡，
+        # 故記錄下來以利診斷，行為維持回傳 None 讓呼叫端走原流程。
+        logger.debug("fetch_bill miss", extra={"key": key}, exc_info=True)
+        return None
