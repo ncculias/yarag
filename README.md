@@ -1,3 +1,11 @@
+> ## ⚠️ 本 repo 已停止維護
+>
+> 後端已於 2026-07 併入 **[ncculias/edu-rag](https://github.com/ncculias/edu-rag)**（monorepo，含前端、後端、文件與議案資料），
+> 完整 git 歷史已保留於該 repo 的 `backend/` 目錄。
+>
+> **請至 [ncculias/edu-rag](https://github.com/ncculias/edu-rag) 取得最新程式碼。**
+> 本 repo 保留作為歷史紀錄，不再接受新的提交。
+
 # YARAG (Yet Another RAG)
 
 > [!Important]
