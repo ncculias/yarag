@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -29,13 +30,13 @@ def _sse(event: str, data) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def _direct_bills(question: str) -> list[tuple[str, str]]:
+async def _direct_bills(question: str) -> list[tuple[str, str]]:
     """辨識問題中的議案編號並取出存在的文件（最多 MAX_BILLS 筆）。"""
     found: list[tuple[str, str]] = []
     for bill_id in bills.extract_bill_ids(question):
         if len(found) >= bills.MAX_BILLS:
             break
-        content = bills.fetch_bill(bill_id)
+        content = await asyncio.to_thread(bills.fetch_bill, bill_id)
         if content:
             found.append((bill_id, content))
     return found
@@ -83,7 +84,7 @@ async def chat(
                         citations = value
                         yield _sse("citations", citations)
             else:
-                direct = _direct_bills(req.message)
+                direct = await _direct_bills(req.message)
                 citations = await cloudflare.search(req.message)
                 for bill_id, content in reversed(direct):
                     citations.insert(

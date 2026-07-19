@@ -197,7 +197,8 @@ def test_bill_number_prepends_citation(client, auth_headers, monkeypatch):
     _patch_bills(monkeypatch, {"34619": "# 議案 34619：安坑國小開放夜間運動時段"})
     body = client.post("/api/v1/chat", json={"message": "議案34619的內容是什麼"}, headers=auth_headers).text
     citations_line = next(li for li in body.split("\n") if li.startswith("data: ["))
-    assert "bills/34619.md" in citations_line
+    citations = json.loads(citations_line[6:])
+    assert citations[0]["doc_name"] == "bills/34619.md"  # 必須在首位
 
 
 def test_unknown_bill_number_keeps_original_flow(client, auth_headers, monkeypatch):
@@ -229,3 +230,19 @@ def test_no_bill_number_keeps_original_flow(client, auth_headers, monkeypatch):
     monkeypatch.setattr(chat.cloudflare, "stream_chat", fake_stream)
     client.post("/api/v1/chat", json={"message": "校園霸凌相關議案"}, headers=auth_headers)
     assert captured["messages"][-1]["content"] == "校園霸凌相關議案"  # 行為不變
+
+
+def test_bill_injection_capped_at_max(client, auth_headers, monkeypatch):
+    from yarag import chat
+
+    _patch_cloudflare(monkeypatch)
+    _patch_bills(monkeypatch, {"11111": "A", "22222": "B", "33333": "C", "44444": "D"})
+    captured = {}
+
+    async def fake_stream(messages):
+        captured["messages"] = messages
+        yield "答案"
+
+    monkeypatch.setattr(chat.cloudflare, "stream_chat", fake_stream)
+    client.post("/api/v1/chat", json={"message": "比較 11111 22222 33333 44444"}, headers=auth_headers)
+    assert captured["messages"][-1]["content"].count("【議案") == 3  # 上限 3 筆
