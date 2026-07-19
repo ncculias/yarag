@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from yarag import cloudflare, openai_client
+from yarag import bills, cloudflare, openai_client
 from yarag.auth import get_current_user
 from yarag.db import get_db
 from yarag.models import Message, Thread, User
@@ -27,6 +27,26 @@ class ChatRequest(BaseModel):
 
 def _sse(event: str, data) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _direct_bills(question: str) -> list[tuple[str, str]]:
+    """辨識問題中的議案編號並取出存在的文件（最多 MAX_BILLS 筆）。"""
+    found: list[tuple[str, str]] = []
+    for bill_id in bills.extract_bill_ids(question):
+        if len(found) >= bills.MAX_BILLS:
+            break
+        content = bills.fetch_bill(bill_id)
+        if content:
+            found.append((bill_id, content))
+    return found
+
+
+def _augment(question: str, docs: list[tuple[str, str]]) -> str:
+    """把議案全文置於問題之前，確保生成階段一定看得到。"""
+    if not docs:
+        return question
+    blocks = "\n\n".join(f"【議案 {bid} 全文】\n{content}" for bid, content in docs)
+    return f"{blocks}\n\n---\n請依據上列議案全文回答以下問題：\n{question}"
 
 
 @router.post("/chat")
@@ -63,10 +83,20 @@ async def chat(
                         citations = value
                         yield _sse("citations", citations)
             else:
+                direct = _direct_bills(req.message)
                 citations = await cloudflare.search(req.message)
+                for bill_id, content in reversed(direct):
+                    citations.insert(
+                        0,
+                        {
+                            "doc_name": f"bills/{bill_id}.md",
+                            "snippet": content[:200],
+                            "similarity": 1.0,
+                        },
+                    )
                 yield _sse("citations", citations)
                 full_text = ""
-                messages = [*history, {"role": "user", "content": req.message}]
+                messages = [*history, {"role": "user", "content": _augment(req.message, direct)}]
                 async for delta in cloudflare.stream_chat(messages):
                     full_text += delta
                     yield _sse("delta", {"text": delta})

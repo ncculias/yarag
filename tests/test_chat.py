@@ -165,3 +165,67 @@ def test_chat_bumps_thread_to_top_on_followup(client, auth_headers, monkeypatch)
     )
     threads = client.get("/api/v1/threads", headers=auth_headers).json()
     assert threads[0]["id"] == first_tid
+
+
+def _patch_bills(monkeypatch, available: dict[str, str]):
+    from yarag import chat
+
+    monkeypatch.setattr(chat.bills, "fetch_bill", lambda bid: available.get(bid))
+
+
+def test_bill_number_injects_content_into_prompt(client, auth_headers, monkeypatch):
+    from yarag import chat
+
+    _patch_cloudflare(monkeypatch)
+    _patch_bills(monkeypatch, {"34619": "# 議案 34619：安坑國小開放夜間運動時段"})
+    captured = {}
+
+    async def fake_stream(messages):
+        captured["messages"] = messages
+        yield "答案"
+
+    monkeypatch.setattr(chat.cloudflare, "stream_chat", fake_stream)
+    r = client.post("/api/v1/chat", json={"message": "議案34619的內容是什麼"}, headers=auth_headers)
+    assert r.status_code == 200
+    last = captured["messages"][-1]["content"]
+    assert "安坑國小開放夜間運動時段" in last  # 議案全文已注入
+    assert "議案34619的內容是什麼" in last  # 原問題保留
+
+
+def test_bill_number_prepends_citation(client, auth_headers, monkeypatch):
+    _patch_cloudflare(monkeypatch)
+    _patch_bills(monkeypatch, {"34619": "# 議案 34619：安坑國小開放夜間運動時段"})
+    body = client.post("/api/v1/chat", json={"message": "議案34619的內容是什麼"}, headers=auth_headers).text
+    citations_line = next(li for li in body.split("\n") if li.startswith("data: ["))
+    assert "bills/34619.md" in citations_line
+
+
+def test_unknown_bill_number_keeps_original_flow(client, auth_headers, monkeypatch):
+    from yarag import chat
+
+    _patch_cloudflare(monkeypatch)
+    _patch_bills(monkeypatch, {})  # 該編號不存在
+    captured = {}
+
+    async def fake_stream(messages):
+        captured["messages"] = messages
+        yield "答案"
+
+    monkeypatch.setattr(chat.cloudflare, "stream_chat", fake_stream)
+    client.post("/api/v1/chat", json={"message": "議案99999的內容"}, headers=auth_headers)
+    assert captured["messages"][-1]["content"] == "議案99999的內容"  # 未加工
+
+
+def test_no_bill_number_keeps_original_flow(client, auth_headers, monkeypatch):
+    from yarag import chat
+
+    _patch_cloudflare(monkeypatch)
+    captured = {}
+
+    async def fake_stream(messages):
+        captured["messages"] = messages
+        yield "答案"
+
+    monkeypatch.setattr(chat.cloudflare, "stream_chat", fake_stream)
+    client.post("/api/v1/chat", json={"message": "校園霸凌相關議案"}, headers=auth_headers)
+    assert captured["messages"][-1]["content"] == "校園霸凌相關議案"  # 行為不變
